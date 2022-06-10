@@ -1,0 +1,165 @@
+20220319:移除了一些旧的脚本，或者用新脚本代替
+
+#以下文字中，#开头的部分为注释和说明，没有#的为需要输入的指令部分，请完整拷贝到结束处（请注意自动换行时过长的指令），然后粘贴回车执行，一次一行
+
+#请大家自行寻找适当的VPS，注册网站，填写适当的信息（例如信用卡或支付宝）等
+#增加一个虚拟机实例，一般来说选择低配的例如5刀/月就可以了，根据情况选择系统，目前推荐Ubuntu或Debian，CentOS不太推荐特别是老版本
+
+
+#然后通过ssh客户端，或自行使用web界面操作
+
+#输入
+root
+#输入
+密码
+#（只能手动输入，而且光标不会动，所以看不到你的输入，输错后请用shift+backspace*N来删除，下同）然后回车
+
+#然后根据需求依次执行如下指令，请注意绝大多数指令都需要在root目录下执行，请检查
+#【-1】部分VPS不提供root用户，请先切换到root（可能不需要）
+sudo su
+#输入当前用户的密码
+
+#【0】极简OS中需要先安装必要的各种工具和依赖包等
+#【0A】Ubuntu和Debian
+apt-get update 
+apt-get remove vim-common -y && apt-get install git curl wget vim iputils-ping net-tools lrzsz firewalld mtr unzip socat lsb-release resolvconf sysstat iotop iptables-persistent -y
+
+#【0A1】Ubuntu和Debian，有key问题使用
+apt-get install debian-keyring debian-archive-keyring
+
+#【0B】CentOS
+yum update -y
+yum remove vim-common && yum install git curl wget vim net-tools lrzsz firewalld mtr unzip socat bind-utils -y
+
+#lock问题出现的时候的解决方案：
+sudo rm /var/lib/dpkg/lock-frontend
+sudo rm /var/lib/dpkg/lock
+sudo rm /var/cache/apt/archives/lock
+
+#=============================================
+#代理安装部分
+
+#【1.0Trojan脚本】主力安装脚本，带Web，有更新到最近，都选默认1，数据库安装部分可能会慢，已经升级了新acme流程
+source <(curl -sL https://git.io/trojan-install)
+#卸载
+source <(curl -sL https://git.io/trojan-install) --remove
+
+#现在acme部分需要注册，到https://zerossl.com/ 注册后
+/root/.acme.sh/acme.sh --register-account -m 你的注册邮箱
+
+#【1.05Trojan脚本】这个优点是还保留了完整的ngxinx服务，更新到10个月前，对页面或者web服务有要求装这个
+curl -O https://raw.githubusercontent.com/atrandys/trojan/master/trojan_mult.sh && chmod +x trojan_mult.sh && ./trojan_mult.sh
+./trojan_mult.sh
+
+#【1.06Trojan脚本】备选安装脚本，似乎是上一个的branch，类似，没发现优点，推荐度较上一个低
+curl -O https://raw.githubusercontent.com/xxxbrian/trojan.sh/main/trojan.sh && chmod +x trojan.sh && ./trojan.sh
+
+#这里注意需要提前注册好域名，在安装过程中途输入，并绑定好ip至vps所在，其余证书和监听和伪装网站的搭建都可以自动完成，期间如果提示证书失败，再次执行脚本，选择修复，然后再执行脚本，执行安装（共见到3次脚本选择界面）
+#期间还需要输入密码，密码一定不要用纯数字或16进制数组结构，在后续的配置中，只需要使用域名和密码就可以，端口为默认的443，修改需要通过改动config文件
+#域名的几个易得方便的网站： dynu.com  my.noip.com freedns.afraid.org 等，使用方法是找到dns/ddns服务，申请自定义前缀的免费域名，然后绑定vps的IP（A记录或www或直接绑定ip即可）
+
+cat /usr/src/trojan/server.conf
+#查看端口 密码等信息 如需修改端口密码等编辑文件然后重启trojan服务
+systemctl restart trojan
+
+curl https://get.acme.sh | sh
+#出现缺少acme提示时执行
+
+iptables -I IN_public_allow -p tcp --dport 80 -j ACCEPT
+iptables -I IN_public_allow -p tcp --dport 443 -j ACCEPT
+#少数debian打开对应端口用，出现80端口不能访问的时候执行一下（【表现可能是ACME无法安装证书，重试30次的情况】），其他端口如果扫描不通也同理
+
+iptables-save > /etc/iptables.up.rules
+#debian保存iptables设置
+
+
+#=============================================V2ray和上面的trojan二选一
+#【1.1】简易的安装V2ray的脚本，当前已不推荐，选择【1】（TCP）作为链接方式，端口请选择常见端口，选择【不要安装广告拦截和不要安装ss——除非你确实有这个需求】
+curl -s -L https://git.io/v2ray.sh && +x v2ray.sh && ./v2ray.sh
+
+#安装后，可以用v2ray url指令获取可用的vmess链接，拷贝后直接导入各类客户端
+#=============================================理论到此已经可以测通
+
+其他附加部分，可选
+#【2.0】新的加速脚本,2206更新
+curl -Lso- https://git.io/kernel.sh && +x kernel.sh && ./kernel.sh
+选择bbr即可，然后重启
+
+#【2.05】加速脚本，500k和50m的区别【没有特殊需求选4 BBR】，其余涉及换内核，可能造成vps无法连接之类的问题
+wget -N --no-check-certificate "https://raw.githubusercontent.com/chiakge/Linux-NetSpeed/master/tcp.sh" && chmod +x tcp.sh && ./tcp.sh
+#如果涉及换内核需要【重启】，重启后执行下一行指令，选择对应加速，中间需要一次回车
+./tcp.sh
+
+#【2.06】上一个的分支，更新更多，使用同上
+wget -O tcpx.sh "https://github.com/ylx2016/Linux-NetSpeed/raw/master/tcpx.sh" && chmod +x tcpx.sh && ./tcpx.sh
+
+#【2.1备用的脚本】91云锐速脚本（Ucloud可用），和上面的择一安装
+wget -N --no-check-certificate https://github.com/91yun/serverspeeder/raw/master/serverspeeder.sh && bash serverspeeder.sh
+
+#【3.0】安装自动屏蔽暴力破解ssh的防护软件（非必要但可有效提高安全性）
+wget https://raw.githubusercontent.com/FunctionClub/Fail2ban/master/fail2ban.sh && bash fail2ban.sh
+
+#期间需要确认输入，依次输入n 5 72即可（不改变ssh端口，5次尝试错误即ban，和ban时间72小时）
+#fail2ban-client status ssh-iptables 可以定期查看自己的服务器被爬虫尝试登陆root的情况和被ban的ip列表
+
+#【4.0】删除有潜在危险的开放的邮件服务（非必要但可有效提高安全性）
+apt-get --purge remove exim4 exim4-base exim4-config -y
+
+#【5.0】【如使用trojan脚本则已经安装完毕无需执行】安装nginx服务作为测速用的www服务器（非必要，但可用于其他服务和测速）
+apt-get install nginx php -y
+
+#【5.1】从某个公网测试网站，下载一个测速文件（一个空的100m大小的二进制文件）到服务器
+cd  /usr/share/nginx/html && wget -O 100mb.bin https://hnd-jp-ping.vultr.com/vultr.com.100MB.bin && cd ~
+#之后可用你的电脑或手机浏览器打开 http://$(你的vps的ip或者域名)/100mb.bin 观察下载速度，手机测速请在wifi下进行（需要100m流量）
+#nginx -s stop 测速完成后关闭http服务
+
+#【5.2】安装html5的测试页面（PHP部分可能有问题，但测速部分可用）
+git clone https://github.com/adolfintel/speedtest.git && cd speedtest && cp -R backend example-singleServer-pretty.html example-singleServer-full.html *.js /usr/share/nginx/html/ && cd /usr/share/nginx/html/ && mv index.html indexback.html && mv example-singleServer-full.html index.html && cd ~
+
+#【5.2.1】回程路由（AS号）脚本
+wget -q route.f2k.pub -O route && bash route
+
+#【5.2.1】链路可视化脚本，ipip.net出品的，如果是64位系统则直接besttrace替换besttrace32，但目前问题是受到授权限制不能看物理位置
+wget http://cdn.ipip.net/17mon/besttrace4linux.zip && unzip besttrace4linux.zip && chmod +x besttrace && ./besttrace -q 1 IP
+
+#【5.2.2】脚本2，反向测试路由节点的脚本，包含系统信息和节点速度（海外节点）
+wget -N --no-check-certificate https://raw.githubusercontent.com/FunctionClub/ZBench/master/ZBench.sh && bash ZBench.sh
+
+#【5.3.1】脚本3，反向测试路由节点的脚本，包含系统信息和节点速度（国内节点）
+wget -qO- --no-check-certificate https://raw.githubusercontent.com/oooldking/script/master/superbench.sh | bash
+
+#【5.3.2】脚本4，LemonBench，前几个的组合
+curl -fsL https://ilemonra.in/LemonBenchIntl | bash -s fast
+
+#【5.3.2】脚本5，回程路由测试（国内节点）
+wget -qO- git.io/autobesttrace | bash
+
+#【可能已失效】专门的测速脚本，VPS到国内三网节点的速度，可以自选线路测试
+wget https://raw.githubusercontent.com/oooldking/script/master/superspeed.sh && chmod +x superspeed.sh && ./superspeed.sh
+bash <(curl -Lso- https://git.io/superspeed)
+
+#【5.4】测试NF是否解锁的脚本
+wget -O nf https://github.com/sjlleo/netflix-verify/releases/download/2.01/nf_2.01_linux_amd64 && chmod +x nf && clear && ./nf
+
+#【5.4.1】流媒体测试，海外视频网站是否能使用，更全面
+bash <(curl -sSL "https://github.com/CoiaPrant/MediaUnlock_Test/raw/main/check.sh")
+
+#【5.4.2】同上测试NF是否解锁的脚本
+wget --no-check-certificate https://raw.githubusercontent.com/jinwyp/one_click_script/master/netflix_check.sh && chmod +x ./netflix_check.sh && ./netflix_check.sh
+
+Trojan客户端
+Clash  Windows/Mac 客户端 （Clash4Win）
+https://github.com/Fndroid/clash_for_windows_pkg/releases
+Clash 安卓客户端（Clash4And）
+https://github.com/Kr328/ClashForAndroid/releases
+iOS 客户端
+shadowrocket 等
+
+V2ray windows客户端 （推荐的是V2rayN，功能足够好，更新快）
+https://github.com/2dust/v2rayN/releases
+V2ray Mac客户端 （推荐的是V2rayU，更容易配置）
+https://github.com/yanue/V2rayU/releases
+v2ray 安卓客户端  （推荐改为V2rayNG _安卓9 10 支持更好）
+https://github.com/2dust/v2rayNG/releases
+v2ray iOS客户端 （国服无法找到，请用海外服账号下载）
+shadowrocket 等
