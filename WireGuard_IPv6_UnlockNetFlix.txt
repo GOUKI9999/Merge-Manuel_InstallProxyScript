@@ -1,0 +1,115 @@
+apt install curl sudo lsb-release resolvconf iptables-persistent -y
+ 
+#【1.0】安装wgcf脚本
+curl -fsSL git.io/wgcf.sh | sudo bash
+
+#【1.1】 注册warp账号，生成配置文件wgcf-account.toml
+wgcf register
+ 
+#【1.2】生成Wire­Guard配置文件wgcf-profile.conf
+wgcf generate
+
+#【1.3】修改文件，去掉ipv4和增加dns
+vi  wgcf-profile.conf
+DNS = 9.9.9.10,8.8.8.8,1.1.1.1
+#注释或移除AllowedIPs = 0.0.0.0/0
+
+#【2.0】安装WireGuard，先增加能安装WG的源（debian only）
+echo "deb http://deb.debian.org/debian/ unstable main" > /etc/apt/sources.list.d/unstable-wireguard.list
+printf 'Package: *\nPin: release a=unstable\nPin-Priority: 150\n' > /etc/apt/preferences.d/limit-unstable
+apt update
+
+#【2.01】
+#如果遇到丢key问题，执行下两行，并重新update，否则跳到2.1，
+sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys Key内容1
+sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys Key内容2
+
+#【2.1】安装header保证路径争取并安装wireguard（可能最后很慢99%）
+sudo apt-get install linux-headers-$(uname -r)
+apt install wireguard wireguard-dkms wireguard-tools
+
+#【2.2】Wire­Guard 配置文件复制到 /etc/wireguard/ 并命名为 wgcf.conf
+cp wgcf-profile.conf /etc/wireguard/wgcf.conf
+ 
+#【2.3】加载内核模块（出现module no found问题执行下面2.31及之后，否则跳到检查）
+modprobe wireguard
+
+#【2.31A】仍然出现问题，而且Header安装locate错误的，尝试如下方式修复
+sudo apt-get update
+sudo apt-get upgrade
+sudo apt-get dist-upgrade
+reboot
+
+#【2.31A】仍然出现问题，而且Header错误是4.15.x的，是WG不兼容老核格式，考虑升核，并重启，然后回到2.1-2.32-2.3
+sudo apt-get install --install-recommends linux-generic-hwe-18.04
+
+#【2.32】然后重装一下WG，到正确的位置
+sudo apt-get remove wireguard
+apt-get install wireguard
+ 
+#【2.4】检查WG模块加载是否正常
+lsmod | grep wireguard
+ 
+#【2.5】开启隧道（如果跳出ip -6有错，执行2.41，否则跳到自启）
+sudo wg-quick up wgcf
+ 
+#【2.51】ipv6无效问题，查看是否有这个配置为1
+sysctl -a |grep disable_ipv6
+  
+#【2.52】如果有则修改disable_ipv6的所有变成0
+vi /etc/sysctl.conf 
+#没有则增加如下一条
+net.ipv6.conf.all.disable_ipv6 = 0
+
+#【2.53】修改完之后【立即生效】,然后返回2.4
+/sbin/sysctl -p
+
+# 【2.6】设置开机自启
+systemctl enable wg-quick@wgcf
+systemctl start wg-quick@wgcf
+
+
+# 【2.7】修改配置
+vi /etc/gai.conf
+ 
+# 优先使用ipv6
+label ::1/128 0
+label ::/0 1
+label 2002::/16 2
+label fd01::/16 1
+label ::/96 3
+label ::ffff:0:0/96 4
+precedence ::1/128 50
+precedence ::/0 40
+precedence fd01::/16 40
+precedence 2002::/16 30
+precedence ::/96 20
+precedence ::ffff:0:0/96 10
+
+#或去掉原有注释，并新增#
+precedence fd01::/16 40
+label fd01::/16 1
+
+#【3.0】外部端口未开，通过iptables修改和保存（iptables-persistent已经安装）
+iptables -I IN_public_allow -p tcp --dport 80 -j ACCEPT
+iptables -I IN_public_allow -p tcp --dport 443 -j ACCEPT
+netfilter-persistent  save
+#查看端口开放和监听情况
+iptables -L -n -v
+netstat -nlp
+
+ 
+#【4.0】验证如果ipv6在前面就是合理的
+curl ip.p3terx.com
+
+#【4.1】Netflix检测脚本
+wget -O nf https://github.com/sjlleo/netflix-verify/releases/download/2.6/nf_2.6_linux_amd64 && chmod +x nf && clear && ./nf
+
+#【4.2】各种流媒体情况检测脚本
+bash <(curl -L -s https://raw.githubusercontent.com/lmc999/RegionRestrictionCheck/main/check.sh)
+
+#浏览器查看解析度和其他信息热键
+Netflix:
+Ctrl+Shift+Alt+D
+Disney+:
+Ctrl+Shift+.
